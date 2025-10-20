@@ -1,0 +1,96 @@
+# .github/workflows/cd_pipeline.yml
+#
+# This GitHub Actions workflow defines the Continuous Deployment (CD) pipeline.
+# It triggers on pushes to the 'main' branch (after PR merge) to build and publish
+# production artifacts.
+#
+# The pipeline performs the following key functions:
+# 1. Builds the lightweight FastAPI inference service Docker image
+# 2. Pushes the image to GitHub Container Registry (ghcr.io)
+# 3. Tags images with both commit SHA and 'latest' for flexible deployments
+# 4. Optimizes builds with Docker layer caching
+#
+# The CD pipeline only runs when inference service files are modified,
+# making it efficient and reducing unnecessary builds.
+
+name: CD Pipeline
+
+on:
+    push:
+        branches: ["main"]
+        paths:
+            - "inference-service/**"
+            - ".github/workflows/cd_pipeline.yml"
+
+env:
+    REGISTRY: ghcr.io
+    IMAGE_NAME: ${{ github.repository }}/sentiment-inference
+
+jobs:
+    build-and-push-inference-service:
+        name: Build and Push Inference Service
+        runs-on: ubuntu-latest
+        permissions:
+            contents: read
+            packages: write
+
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v4
+
+            - name: Set up Docker Buildx
+              uses: docker/setup-buildx-action@v3
+
+            - name: Log in to GitHub Container Registry
+              uses: docker/login-action@v3
+              with:
+                  registry: ${{ env.REGISTRY }}
+                  username: ${{ github.actor }}
+                  password: ${{ secrets.GITHUB_TOKEN }}
+
+            - name: Extract metadata (tags, labels) for Docker
+              id: meta
+              uses: docker/metadata-action@v5
+              with:
+                  images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+                  tags: |
+                      type=sha,prefix=,format=long
+                      type=raw,value=latest,enable={{is_default_branch}}
+                  labels: |
+                      org.opencontainers.image.title=Sentiment Inference Service
+                      org.opencontainers.image.description=FastAPI service for sentiment analysis model inference
+                      org.opencontainers.image.vendor=${{ github.repository_owner }}
+
+            - name: Build and push Docker image
+              uses: docker/build-push-action@v5
+              with:
+                  context: ./inference-service
+                  file: ./inference-service/Dockerfile
+                  push: true
+                  tags: ${{ steps.meta.outputs.tags }}
+                  labels: ${{ steps.meta.outputs.labels }}
+                  cache-from: type=gha
+                  cache-to: type=gha,mode=max
+
+            - name: Generate deployment summary
+              run: |
+                  echo "## 🚀 Deployment Summary" >> $GITHUB_STEP_SUMMARY
+                  echo "" >> $GITHUB_STEP_SUMMARY
+                  echo "**Service:** Sentiment Inference API" >> $GITHUB_STEP_SUMMARY
+                  echo "**Image:** \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}\`" >> $GITHUB_STEP_SUMMARY
+                  echo "**Tags:**" >> $GITHUB_STEP_SUMMARY
+                  echo "- \`latest\`" >> $GITHUB_STEP_SUMMARY
+                  echo "- \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+                  echo "" >> $GITHUB_STEP_SUMMARY
+                  echo "### 📦 Pull Image" >> $GITHUB_STEP_SUMMARY
+                  echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+                  echo "docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest" >> $GITHUB_STEP_SUMMARY
+                  echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+                  echo "" >> $GITHUB_STEP_SUMMARY
+                  echo "### 🏃 Run Container" >> $GITHUB_STEP_SUMMARY
+                  echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+                  echo "docker run -p 8000:8000 \\" >> $GITHUB_STEP_SUMMARY
+                  echo "  -e MLFLOW_TRACKING_URI=mlruns \\" >> $GITHUB_STEP_SUMMARY
+                  echo "  -e MODEL_URI=models:/prod-sentiment-classifier/Production \\" >> $GITHUB_STEP_SUMMARY
+                  echo "  ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest" >> $GITHUB_STEP_SUMMARY
+                  echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
