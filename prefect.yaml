@@ -1,0 +1,87 @@
+# prefect.yaml
+#
+# This file defines the deployment configuration for your Prefect flows.
+# It tells Prefect where to find your flow code, how to run it, and
+# any associated metadata.
+#
+# To apply this deployment (after `prefect server start`):
+#   prefect deploy --all
+#
+# To run the deployment (e.g., from a 'default' work pool):
+#   prefect agent start -p default-agent-pool
+#
+# (In Prefect 2.0+, you often use work pools and workers)
+#   prefect worker start -p default-agent-pool -t process
+
+# -----------------------------------------------------------------
+# General Project Configuration
+# -----------------------------------------------------------------
+name: automated-retraining-pipeline
+prefect-version: 2.10.0 # Specify a compatible Prefect version
+
+# -----------------------------------------------------------------
+# Build Configuration
+# -----------------------------------------------------------------
+# This section defines *how* your flow code is packaged.
+# 'docker' build: Packages the entire project into a Docker image.
+# This is the recommended approach for production.
+build:
+  - name: docker-flow-image
+    dockerfile: Dockerfile
+    image_name: automated-retraining-pipeline-flow
+    image_tag: latest
+    # 'push: false' means it will only build the image locally.
+    # Set to true if you have a Docker registry (e.Services, Docker Hub).
+    push: false
+
+# -----------------------------------------------------------------
+# Push Configuration (Optional)
+# -----------------------------------------------------------------
+# If you wanted to push to a registry, you would configure it here.
+# push:
+#   - name: my-docker-registry
+#     image_name: myregistry.io/automated-retraining-pipeline-flow
+#     image_tag: latest
+#     dockerfile: Dockerfile
+
+# -----------------------------------------------------------------
+# Deployment Definitions
+# -----------------------------------------------------------------
+# This is where you define one or more deployments.
+deployments:
+  - name: main-retraining-deployment
+    # Description for the Prefect UI
+    description: >
+      Main deployment for the automated sentiment model
+      retraining pipeline. Runs the full check-and-retrain flow.
+    
+    # Entrypoint: The file and function to call
+    entrypoint: src/pipeline/flows.py:retraining_flow
+    
+    # Work pool defines the type of infrastructure
+    work_pool:
+      name: default-agent-pool # Use a simple process-based pool
+      work_queue_name: default
+      
+    # How to get the flow code to the worker
+    # 'image' pull: The worker will pull the Docker image built above.
+    pull:
+      - name: pull-docker-image
+        image:
+          name: automated-retraining-pipeline-flow
+          tag: latest
+        
+    # Parameters for the flow
+    parameters:
+      force_retrain: false # Default behavior is to check for drift
+
+    # Schedule (Example: Run every day at midnight UTC)
+    # schedule:
+    #   cron: "0 0 * * *"
+    #   timezone: "UTC"
+
+    # Tags for filtering in the UI
+    tags:
+      - mlops
+      - retraining
+      - production
