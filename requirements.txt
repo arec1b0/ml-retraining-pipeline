@@ -1,0 +1,53 @@
+# -----------------------------------------------------------------
+# Core MLOps & Orchestration
+# -----------------------------------------------------------------
+prefect                   # Workflow orchestration
+prefect-docker            # For building Docker images with Prefect
+
+# -----------------------------------------------------------------
+# Experiment Tracking
+# -----------------------------------------------------------------
+mlflow                    # Experiment tracking, model registry, and logging
+boto3                     # Required by MLflow/DVC for S3-compatible storage (like MinIO)
+psycopg2-binary           # Required if using PostgreSQL as a backend for MLflow/Prefect
+
+# -----------------------------------------------------------------
+# Data Version Control
+# -----------------------------------------------------------------
+dvc[s3]                   # Data Version Control (with S3 support)
+
+# -----------------------------------------------------------------
+# Data Validation
+# -----------------------------------------------------------------
+great-expectations        # Data quality and validation
+
+# -----------------------------------------------------------------
+# Model & Data Monitoring
+# -----------------------------------------------------------------
+evidently                 # Data drift and model performance monitoring
+
+# -----------------------------------------------------------------
+# ML & Data Science Stack
+# -----------------------------------------------------------------
+scikit-learn              # Core ML library for modeling and metrics
+pandas                    # Data manipulation and analysis
+numpy                     # Numerical computing
+scipy                     # Scientific computing (often a dependency)
+
+# -----------------------------------------------------------------
+# Configuration & Utilities
+# -----------------------------------------------------------------
+pydantic                  # For settings management (data validation)
+pydantic-settings         # Replaces pydantic[dotenv] for loading from .env files
+python-dotenv             # For loading .env files
+
+# -----------------------------------------------------------------
+# Notebook Environment (for exploration)
+# -----------------------------------------------------------------
+jupyterlab                # Interactive development environment
+notebook                  # Jupyter notebook support
+
+# -----------------------------------------------------------------
+# Optional: Linter/Formatter (for CI/CD)
+# -----------------------------------------------------------------
+# ruff                      # High-performance linter and formatter

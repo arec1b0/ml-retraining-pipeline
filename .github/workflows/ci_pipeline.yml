@@ -1,0 +1,69 @@
+# .github/workflows/ci_pipeline.yml
+#
+# This GitHub Actions workflow defines the Continuous Integration (CI) pipeline.
+# It triggers on pushes to the 'main' branch or any pull request targeting 'main'.
+#
+# The pipeline performs the following key functions:
+# 1. Sets up the Python environment.
+# 2. Installs all project dependencies.
+# 3. Runs linting and formatting checks using 'ruff' (fast, Rust-based tool).
+# 4. Executes the Prefect flow (retraining pipeline) as a script to ensure
+#    it compiles and all tasks are correctly defined. This acts as an
+#    integration test for the pipeline logic itself.
+
+name: CI Pipeline
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11"]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install ruff
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          
+          # We need to initialize Great Expectations to have the config available
+          # The 'ci' flag scaffolds the project without opening Data Docs
+          great_expectations init --ci
+
+      - name: Lint with ruff
+        run: |
+          ruff check .
+          
+      - name: Format with ruff
+        run: |
+          ruff format --check .
+
+      - name: Validate Prefect flow (Integration Test)
+        # This command runs the main flow file as a Python script.
+        # If the script fails to compile (e.g., due to import errors,
+        # syntax errors, or task registration issues), the CI will fail.
+        # We set MLFLOW_TRACKING_URI to a temp directory for the CI run.
+        env:
+          MLFLOW_TRACKING_URI: "/tmp/mlruns"
+          # Add other minimal required env vars for the script to run
+          RAW_DATA_PATH: "data/raw/feedback.csv"
+          PROCESSED_DATA_PATH: "data/processed/sentiment.csv"
+          REFERENCE_DATA_PATH: "data/reference/sentiment_reference.csv"
+          EVIDENTLY_REPORTS_PATH: "/tmp/reports/evidently"
+        run: |
+          python src/pipeline/flows.py

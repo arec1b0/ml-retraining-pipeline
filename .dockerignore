@@ -1,0 +1,61 @@
+# Git directories
+.git/
+.github/
+
+# DVC local cache and temp files
+.dvc/cache
+.dvc/tmp
+
+# Terraform state and configurations
+terraform/
+.terraform/
+*.tfstate
+*.tfstate.backup
+
+# Python cache and compiled files
+__pycache__/
+*.pyc
+*.pyo
+
+# Local environments
+.venv/
+venv/
+env/
+ENV/
+
+# Local configuration
+.env
+
+# IDE and OS specific files
+.idea/
+.vscode/
+*.code-workspace
+.DS_Store
+Thumbs.db
+
+# Documentation
+notebooks/
+
+# Test reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.pytest_cache/
+
+# Local MLflow runs
+mlruns/
+
+# Local data (assuming data is pulled via DVC in the container)
+data/
+
+# Local GE artifacts
+great_expectations/uncommitted/
+
+# Local Evidently reports
+reports/
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
