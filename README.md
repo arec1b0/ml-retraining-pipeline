@@ -21,6 +21,34 @@ This system is built using a modern, Python-native MLOps stack:
     * Versions large data files (like `feedback.csv`) and models, storing them in remote storage (e.g., S3, MinIO) while keeping lightweight pointers in Git.
 * **Containerization:** **Docker**
     * Packages the entire application, including all dependencies and code, for consistent execution by Prefect agents.
+* **CI/CD Integration:** **GitHub Actions**
+    * Automated pipeline linking: When a model is promoted to Production, the CD pipeline is automatically triggered via GitHub Actions API.
+
+---
+
+## 🔗 CT-CD Integration (Continuous Training → Continuous Deployment)
+
+This pipeline features **automated CT-CD linkage** that closes the loop between model training and deployment:
+
+**What it does:**
+- 🤖 When a new model is promoted to Production in MLflow, it automatically triggers the CD pipeline
+- 🚀 The CD pipeline builds and pushes a new Docker image for the inference service
+- 📊 Full traceability: Model version and accuracy metadata are passed to the deployment
+
+**Quick Setup:**
+```bash
+# 1. Set environment variables in .env
+ENABLE_CD_TRIGGER=true
+GITHUB_TOKEN=your_github_token
+GITHUB_REPO_OWNER=your-username
+GITHUB_REPO_NAME=ml-retraining-pipeline
+
+# 2. That's it! The next time a model is promoted, CD will trigger automatically
+```
+
+**Documentation:**
+- 📖 [Quick Start Guide](docs/QUICK_START_CT_CD.md) - 5-minute setup
+- 📖 [Full CT-CD Documentation](docs/CT_CD_INTEGRATION.md) - Architecture & best practices
 
 ---
 

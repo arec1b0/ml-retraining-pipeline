@@ -9,19 +9,127 @@ current production model.
 """
 
 import mlflow
-import pandas as pd
+import requests
 from mlflow.tracking import MlflowClient
 from mlflow.entities import ModelVersion
 from prefect import task, get_run_logger
 from typing import Dict, Any, Optional
 
 from src.config.settings import Settings
-from src.utils.logging import get_logger as get_custom_logger
-from src.model_monitoring.monitoring import run_drift_analysis
 
 
 # Note: We use get_custom_logger() for general module-level logging
 # and get_run_logger() from Prefect inside tasks for Prefect-aware logging.
+
+
+def trigger_cd_pipeline(
+    model_version: str,
+    model_accuracy: float,
+    settings: Settings,
+) -> bool:
+    """
+    Triggers the CD pipeline via GitHub Actions workflow_dispatch API.
+
+    This function implements the CT -> CD linkage by automatically
+    triggering the deployment pipeline when a new model is promoted
+    to Production.
+
+    Args:
+        model_version: The version number of the promoted model.
+        model_accuracy: The accuracy of the promoted model.
+        settings: The application settings object.
+
+    Returns:
+        True if the CD pipeline was successfully triggered, else False.
+    """
+    prefect_logger = get_run_logger()
+
+    # Check if CD trigger is enabled
+    if not settings.ENABLE_CD_TRIGGER:
+        prefect_logger.info(
+            "CD pipeline trigger is disabled. "
+            "Set ENABLE_CD_TRIGGER=true to enable."
+        )
+        return False
+
+    # Validate required GitHub configuration
+    if not all([
+        settings.GITHUB_TOKEN,
+        settings.GITHUB_REPO_OWNER,
+        settings.GITHUB_REPO_NAME
+    ]):
+        prefect_logger.warning(
+            "GitHub configuration incomplete. "
+            "Cannot trigger CD pipeline. "
+            "Please set GITHUB_TOKEN, GITHUB_REPO_OWNER, "
+            "and GITHUB_REPO_NAME."
+        )
+        return False
+
+    try:
+        # Construct GitHub Actions workflow_dispatch API URL
+        api_url = (
+            f"https://api.github.com/repos/"
+            f"{settings.GITHUB_REPO_OWNER}/"
+            f"{settings.GITHUB_REPO_NAME}/"
+            f"actions/workflows/{settings.CD_WORKFLOW_NAME}/dispatches"
+        )
+
+        # Prepare the request payload
+        payload = {
+            "ref": "main",  # Branch to run the workflow on
+            "inputs": {
+                "model_version": str(model_version),
+                "model_accuracy": f"{model_accuracy:.4f}",
+                "trigger_source": "automated_ct_pipeline"
+            }
+        }
+
+        # Prepare headers with authentication
+        headers = {
+            "Accept": "application/vnd.github+json",
+            "Authorization": f"Bearer {settings.GITHUB_TOKEN}",
+            "X-GitHub-Api-Version": "2022-11-28"
+        }
+
+        prefect_logger.info(
+            f"Triggering CD pipeline for model version "
+            f"{model_version} with accuracy {model_accuracy:.4f}..."
+        )
+
+        # Make the API request
+        response = requests.post(
+            api_url,
+            json=payload,
+            headers=headers,
+            timeout=30
+        )
+
+        # Check response status
+        if response.status_code == 204:
+            prefect_logger.info(
+                "Successfully triggered CD pipeline! "
+                "Check GitHub Actions for deployment status."
+            )
+            return True
+        else:
+            prefect_logger.error(
+                f"Failed to trigger CD pipeline. "
+                f"Status code: {response.status_code}, "
+                f"Response: {response.text}"
+            )
+            return False
+
+    except requests.exceptions.RequestException as e:
+        prefect_logger.error(
+            f"Network error while triggering CD pipeline: {e}"
+        )
+        return False
+    except Exception as e:
+        prefect_logger.error(
+            f"Unexpected error while triggering CD pipeline: {e}"
+        )
+        return False
 
 
 @task(name="Register Model in MLflow")
@@ -51,10 +159,11 @@ def register_model(
         The MLflow ModelVersion object if registered, else None.
     """
     prefect_logger = get_run_logger()
-    
+
     if not evaluation_results.get("is_eligible", False):
         prefect_logger.warning(
-            f"Model from run {run_id} is not eligible for registration. Skipping."
+            f"Model from run {run_id} is not eligible for "
+            f"registration. Skipping."
         )
         return None
 
@@ -151,6 +260,29 @@ def promote_model(
                 stage="Production",
                 archive_existing_versions=False,
             )
+
+            # Trigger CD pipeline after first production model promotion
+            prefect_logger.info(
+                "🔗 Initiating CT -> CD pipeline linkage "
+                "for first production model..."
+            )
+            cd_triggered = trigger_cd_pipeline(
+                model_version=new_version_num,
+                model_accuracy=new_accuracy,
+                settings=settings
+            )
+
+            if cd_triggered:
+                prefect_logger.info(
+                    "✅ CD pipeline triggered successfully "
+                    "for first production deployment."
+                )
+            else:
+                prefect_logger.warning(
+                    "⚠️ CD pipeline was not triggered. "
+                    "Manual deployment may be required."
+                )
+
             return
 
         # 2. Compare against the current production model
@@ -172,7 +304,8 @@ def promote_model(
         except Exception:
             prefect_logger.warning(
                 f"Could not retrieve accuracy for production model "
-                f"version {current_prod_model.version}. Defaulting to 0.0."
+                f"version {current_prod_model.version}. "
+                f"Defaulting to 0.0."
             )
 
         # 3. Make promotion decision
@@ -193,8 +326,29 @@ def promote_model(
                 name=model_name,
                 version=new_version_num,
                 stage="Production",
-                archive_existing_versions=True,  # Archive the old prod model
+                archive_existing_versions=True,  # Archive old prod model
             )
+
+            # Trigger CD pipeline after successful promotion
+            prefect_logger.info(
+                "🔗 Initiating CT -> CD pipeline linkage..."
+            )
+            cd_triggered = trigger_cd_pipeline(
+                model_version=new_version_num,
+                model_accuracy=new_accuracy,
+                settings=settings
+            )
+
+            if cd_triggered:
+                prefect_logger.info(
+                    "✅ CD pipeline triggered successfully. "
+                    "New model will be deployed automatically."
+                )
+            else:
+                prefect_logger.warning(
+                    "⚠️ CD pipeline was not triggered. "
+                    "Manual deployment may be required."
+                )
         else:
             prefect_logger.warning(
                 "New model is not better than the current production "

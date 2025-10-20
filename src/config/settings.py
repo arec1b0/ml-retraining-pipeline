@@ -22,7 +22,10 @@ class Settings(BaseSettings):
     # -----------------------------------------------------------------
     PROJECT_NAME: str = Field(
         default="AutomatedModelRetrainingPipeline",
-        description="Defines the name for various services (e.g., Prefect, MLflow)"
+        description=(
+            "Defines the name for various services "
+            "(e.g., Prefect, MLflow)"
+        )
     )
 
     # -----------------------------------------------------------------
@@ -30,7 +33,10 @@ class Settings(BaseSettings):
     # -----------------------------------------------------------------
     MLFLOW_TRACKING_URI: str = Field(
         default="mlruns",
-        description="MLflow experiment tracking URI (local path or remote server)"
+        description=(
+            "MLflow experiment tracking URI "
+            "(local path or remote server)"
+        )
     )
     MLFLOW_EXPERIMENT_NAME: str = Field(
         default="SentimentModelRetraining",
@@ -54,7 +60,10 @@ class Settings(BaseSettings):
     )
     REFERENCE_DATA_PATH: str = Field(
         default="data/reference/sentiment_reference.csv",
-        description="Relative path to the reference dataset for drift detection"
+        description=(
+            "Relative path to the reference dataset "
+            "for drift detection"
+        )
     )
     EVIDENTLY_REPORTS_PATH: str = Field(
         default="reports/evidently",
@@ -74,7 +83,10 @@ class Settings(BaseSettings):
     )
     MODEL_PERFORMANCE_DEGRADATION_THRESHOLD: float = Field(
         default=0.05,
-        description="Max allowed performance drop (e.g., 0.05 = 5%) vs. reference"
+        description=(
+            "Max allowed performance drop "
+            "(e.g., 0.05 = 5%) vs. reference"
+        )
     )
 
     # -----------------------------------------------------------------
@@ -88,6 +100,32 @@ class Settings(BaseSettings):
     MODEL_RANDOM_STATE: int = Field(
         default=42,
         description="Random state for reproducible splits and training"
+    )
+
+    # -----------------------------------------------------------------
+    # CI/CD INTEGRATION (CT -> CD Pipeline Linking)
+    # -----------------------------------------------------------------
+    GITHUB_TOKEN: str = Field(
+        default="",
+        description="GitHub Personal Access Token for triggering CD workflows"
+    )
+    GITHUB_REPO_OWNER: str = Field(
+        default="",
+        description="GitHub repository owner (username or organization)"
+    )
+    GITHUB_REPO_NAME: str = Field(
+        default="",
+        description="GitHub repository name"
+    )
+    CD_WORKFLOW_NAME: str = Field(
+        default="cd_pipeline.yml",
+        description="Name of the CD workflow file to trigger"
+    )
+    ENABLE_CD_TRIGGER: bool = Field(
+        default=False,
+        description=(
+            "Enable automatic CD pipeline trigger on model promotion"
+        )
     )
 
     class Config:

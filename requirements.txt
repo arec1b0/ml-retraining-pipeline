@@ -40,6 +40,7 @@ scipy                     # Scientific computing (often a dependency)
 pydantic                  # For settings management (data validation)
 pydantic-settings         # Replaces pydantic[dotenv] for loading from .env files
 python-dotenv             # For loading .env files
+requests                  # HTTP library for API calls (GitHub Actions webhook)
 
 # -----------------------------------------------------------------
 # Notebook Environment (for exploration)

@@ -21,6 +21,21 @@ on:
         paths:
             - "inference-service/**"
             - ".github/workflows/cd_pipeline.yml"
+    workflow_dispatch:
+        inputs:
+            model_version:
+                description: "Model version promoted to Production"
+                required: false
+                type: string
+            model_accuracy:
+                description: "Model accuracy"
+                required: false
+                type: string
+            trigger_source:
+                description: "Source that triggered the deployment"
+                required: false
+                type: string
+                default: "manual"
 
 env:
     REGISTRY: ghcr.io
@@ -82,6 +97,20 @@ jobs:
                   echo "- \`latest\`" >> $GITHUB_STEP_SUMMARY
                   echo "- \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
                   echo "" >> $GITHUB_STEP_SUMMARY
+
+                  # Add model information if triggered by CT pipeline
+                  if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+                    echo "### 🤖 Model Information" >> $GITHUB_STEP_SUMMARY
+                    echo "**Trigger Source:** \`${{ inputs.trigger_source }}\`" >> $GITHUB_STEP_SUMMARY
+                    if [ -n "${{ inputs.model_version }}" ]; then
+                      echo "**Model Version:** \`${{ inputs.model_version }}\`" >> $GITHUB_STEP_SUMMARY
+                    fi
+                    if [ -n "${{ inputs.model_accuracy }}" ]; then
+                      echo "**Model Accuracy:** \`${{ inputs.model_accuracy }}\`" >> $GITHUB_STEP_SUMMARY
+                    fi
+                    echo "" >> $GITHUB_STEP_SUMMARY
+                  fi
+
                   echo "### 📦 Pull Image" >> $GITHUB_STEP_SUMMARY
                   echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
                   echo "docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest" >> $GITHUB_STEP_SUMMARY
