@@ -7,10 +7,14 @@ track the experiment, and log the final trained model artifact.
 """
 
 import mlflow
-import pandas as pd
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.linear_model import LogisticRegression
-from sklearn.pipeline import Pipeline
+import pandas as pd  # type: ignore[import-untyped]
+from sklearn.feature_extraction.text import (  # type: ignore[import-untyped]
+    TfidfVectorizer,
+)
+from sklearn.linear_model import (  # type: ignore[import-untyped]
+    LogisticRegression,
+)
+from sklearn.pipeline import Pipeline  # type: ignore[import-untyped]
 from prefect import task
 from typing import Tuple, Any
 

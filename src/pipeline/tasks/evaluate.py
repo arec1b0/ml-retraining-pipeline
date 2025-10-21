@@ -8,9 +8,14 @@ the minimum performance criteria to be considered for registration.
 """
 
 import mlflow
-import pandas as pd
-from sklearn.pipeline import Pipeline
-from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
+import pandas as pd  # type: ignore[import-untyped]
+from sklearn.pipeline import Pipeline  # type: ignore[import-untyped]
+from sklearn.metrics import (  # type: ignore[import-untyped]
+    accuracy_score,
+    f1_score,
+    precision_score,
+    recall_score,
+)
 from prefect import task
 from typing import Dict, Any
 
@@ -62,8 +67,12 @@ def evaluate_model(
         metrics = {
             "accuracy": accuracy_score(y_test, y_pred),
             "f1_weighted": f1_score(y_test, y_pred, average="weighted"),
-            "precision_weighted": precision_score(y_test, y_pred, average="weighted"),
-            "recall_weighted": recall_score(y_test, y_pred, average="weighted"),
+            "precision_weighted": precision_score(
+                y_test, y_pred, average="weighted"
+            ),
+            "recall_weighted": recall_score(
+                y_test, y_pred, average="weighted"
+            ),
         }
         logger.info(f"Test set metrics: {metrics}")
 
@@ -71,7 +80,7 @@ def evaluate_model(
         # We use mlflow.start_run() with an existing run_id to "re-open" it
         with mlflow.start_run(run_id=run_id):
             mlflow.log_metrics(metrics)
-            
+
             # Log a tag to indicate this model has been evaluated
             mlflow.set_tag("evaluation_status", "success")
 
@@ -79,7 +88,7 @@ def evaluate_model(
         is_eligible = (
             metrics["accuracy"] >= settings.MIN_TRAINING_ACCURACY
         )
-        
+
         if is_eligible:
             logger.info(
                 f"Model accuracy ({metrics['accuracy']:.4f}) meets threshold "
@@ -95,7 +104,6 @@ def evaluate_model(
             with mlflow.start_run(run_id=run_id):
                 mlflow.set_tag("eligibility", "ineligible_low_accuracy")
 
-
         return {"metrics": metrics, "is_eligible": is_eligible}
 
     except Exception as e:
@@ -108,5 +116,5 @@ def evaluate_model(
                 mlflow.set_tag("evaluation_status", "failed")
         except Exception as mlflow_e:
             logger.error(f"Failed to tag MLflow run: {mlflow_e}")
-        
+
         raise

@@ -9,12 +9,15 @@ The main flow, `retraining_flow`, ties together all tasks:
 2.  Model Training & Evaluation
 3.  Model/Data Drift Analysis
 4.  Conditional Retraining & Registration
+
+Data Processing: Uses Polars for efficient data operations, converting
+to pandas only when necessary for library compatibility (e.g., Evidently AI).
 """
 
-import pandas as pd
+import polars as pl  # type: ignore
 from prefect import flow, task, get_run_logger
 from prefect.context import get_run_context
-from mlflow.tracking import MlflowClient
+import mlflow
 
 # Import configuration and utility
 from src.config.settings import settings
@@ -26,6 +29,8 @@ from src.pipeline.tasks.data import (
     validate_data,
     preprocess_data,
     split_data,
+    load_reference_data,
+    simulate_current_data,
 )
 from src.pipeline.tasks.train import train_model
 from src.pipeline.tasks.evaluate import evaluate_model
@@ -36,88 +41,19 @@ from src.model_monitoring.monitoring import run_drift_analysis
 module_logger = get_logger(__name__)
 
 
-@task(name="Load Reference Data")
-def load_reference_data(path: str) -> pd.DataFrame:
-    """
-    Loads the reference dataset for drift comparison.
-    """
-    logger = get_run_logger()
-    logger.info(f"Loading reference data from: {path}")
-    try:
-        return pd.read_csv(path)
-    except FileNotFoundError:
-        logger.error(f"Reference data not found at {path}. Halting.")
-        raise
-
-
-@task(name="Simulate Current Data Generation")
-def simulate_current_data(
-    reference_df: pd.DataFrame, new_raw_df: pd.DataFrame
-) -> pd.DataFrame:
-    """
-    Simulates a "current" dataset for drift analysis.
-
-    In a real system, this task would:
-    1.  Fetch recent prediction logs from a production database.
-    2.  Join them with ground truth labels (if available).
-
-    Here, we simulate it by:
-    1.  Loading the *latest* production model from MLflow.
-    2.  Running predictions on the *new raw data*.
-    3.  Returning a DataFrame in the same format as the reference data.
-    """
-    logger = get_run_logger()
-    logger.info("Simulating current data with predictions...")
-
-    try:
-        # 1. Load the current "Production" model
-        model_uri = f"models:/{settings.MODEL_REGISTRY_NAME}/Production"
-        prod_model = mlflow.sklearn.load_model(model_uri)
-        logger.info(f"Loaded production model from {model_uri}")
-    except Exception as e:
-        logger.warning(
-            f"Could not load 'Production' model (Error: {e}). "
-            "This is expected on the *first ever* run. "
-            "Using reference data as current data."
-        )
-        # On the first run, no "Production" model exists.
-        # We return the reference data to prevent the flow from failing.
-        # Drift analysis will show 0 drift.
-        return reference_df
-
-    # 2. Use new raw data as the "current" features
-    # Note: We use the *full* raw_df, not just the processed one,
-    # to simulate a real production scenario where we predict on all new data.
-    X_current = new_raw_df["text"]
-    y_current_truth = new_raw_df["sentiment"]
-
-    # 3. Generate predictions
-    y_current_pred = prod_model.predict(X_current)
-
-    # 4. Assemble the "current" DataFrame
-    current_df = pd.DataFrame(
-        {
-            "id": new_raw_df["id"],
-            "text": X_current,
-            "sentiment": y_current_truth,  # Ground truth
-            "prediction": y_current_pred,  # Model's prediction
-        }
-    )
-    
-    logger.info(f"Generated 'current' data simulation: {current_df.shape}")
-    return current_df
-
-
 @task(name="Check Drift and Performance")
 def check_drift_and_performance(
-    reference_df: pd.DataFrame, current_df: pd.DataFrame
+    reference_df: pl.DataFrame, current_df: pl.DataFrame
 ) -> bool:
     """
     Runs Evidently AI analysis and determines if retraining is needed.
 
+    Converts Polars DataFrames to pandas for Evidently AI compatibility.
+
     Args:
-        reference_df: The reference (golden) dataset.
-        current_df: The current (production simulation) dataset.
+        reference_df: The reference (golden) dataset as Polars DataFrame.
+        current_df: The current (production simulation) dataset as
+                   Polars DataFrame.
 
     Returns:
         True if retraining is triggered, False otherwise.
@@ -125,15 +61,26 @@ def check_drift_and_performance(
     logger = get_run_logger()
     logger.info("Checking for data drift and model performance degradation...")
 
+    # Convert Polars DataFrames to pandas for Evidently AI
+    # This is a boundary conversion - we use efficient Polars processing
+    # and convert only when interfacing with pandas-only libraries
+    logger.info(
+        "Converting Polars DataFrames to pandas for Evidently AI..."
+    )
+    reference_df_pandas = reference_df.to_pandas()
+    current_df_pandas = current_df.to_pandas()
+
     analysis_results = run_drift_analysis(
-        reference_df=reference_df, current_df=current_df, settings=settings
+        reference_df=reference_df_pandas,
+        current_df=current_df_pandas,
+        settings=settings
     )
 
     # Decision logic for retraining
     if analysis_results["data_drift_detected"]:
         logger.warning("Data drift DETECTED. Triggering retraining.")
         return True
-    
+
     if analysis_results["model_performance_degraded"]:
         logger.warning(
             "Model performance degradation DETECTED. Triggering retraining."
@@ -166,10 +113,14 @@ def retraining_flow(force_retrain: bool = False):
            promotes it to "Production" if it's better than the old one.
     """
     logger = get_run_logger()
-    ctx = get_run_context()
-    logger.info(f"Starting flow run: {ctx.flow_run.name}")
+    ctx = get_run_context()  # type: ignore
+    try:
+        flow_name = getattr(ctx.flow_run, "name", "unknown")  # type: ignore
+    except (AttributeError, TypeError):
+        flow_name = "unknown"
+    logger.info(f"Starting flow run: {flow_name}")
     logger.info(f"Force Retrain: {force_retrain}")
-    
+
     mlflow.set_tracking_uri(settings.MLFLOW_TRACKING_URI)
 
     # --- 1. Load & Validate New Data ---
@@ -181,7 +132,7 @@ def retraining_flow(force_retrain: bool = False):
     # --- 2. Load Reference & Simulate Current Data ---
     reference_df = load_reference_data(path=settings.REFERENCE_DATA_PATH)
     current_df = simulate_current_data(
-        reference_df=reference_df, new_raw_df=raw_df
+        reference_df=reference_df, new_raw_df=raw_df, settings=settings
     )
 
     # --- 3. Check for Drift ---
@@ -240,7 +191,7 @@ if __name__ == "__main__":
     deployments.
     """
     module_logger.info("Starting flow execution from __main__...")
-    
+
     # Run the flow with forcing
     # On the very first run, a "Production" model won't exist,
     # so `simulate_current_data` will pass, and drift check

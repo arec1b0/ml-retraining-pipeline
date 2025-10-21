@@ -29,23 +29,23 @@ class ModelManager:
     and caches it in memory for fast inference. It also extracts and
     stores model metadata for monitoring purposes.
     """
-    
+
     _instance: Optional['ModelManager'] = None
     _model = None
     _model_metadata: Dict[str, Any] = {}
     _loaded_at: Optional[str] = None
-    
+
     def __new__(cls):
         """Implement singleton pattern."""
         if cls._instance is None:
             cls._instance = super(ModelManager, cls).__new__(cls)
         return cls._instance
-    
+
     def __init__(self):
         """Initialize the model manager (only runs once due to singleton)."""
         if self._model is None:
             self.load_model()
-    
+
     def load_model(self) -> None:
         """
         Load model from MLflow Model Registry.
@@ -59,13 +59,13 @@ class ModelManager:
                 f"{settings.MLFLOW_TRACKING_URI}"
             )
             mlflow.set_tracking_uri(settings.MLFLOW_TRACKING_URI)
-            
+
             logger.info(f"Loading model from: {settings.MODEL_URI}")
             self._model = mlflow.pyfunc.load_model(settings.MODEL_URI)
 
             # Extract model metadata
             self._extract_model_metadata()
-            
+
             # Record load time
             self._loaded_at = datetime.utcnow().isoformat()
 
@@ -80,7 +80,7 @@ class ModelManager:
                 f"Failed to load model from {settings.MODEL_URI}: {e}"
             )
             raise RuntimeError(f"Model loading failed: {str(e)}")
-    
+
     def _extract_model_metadata(self) -> None:
         """
         Extract metadata from the loaded MLflow model.
@@ -90,7 +90,7 @@ class ModelManager:
         """
         try:
             client = MlflowClient(tracking_uri=settings.MLFLOW_TRACKING_URI)
-            
+
             # Parse model URI to extract name and stage
             # Format: models:/model-name/Stage or
             # models:/model-name/version-number
@@ -99,7 +99,7 @@ class ModelManager:
             stage_or_version = (
                 uri_parts[1] if len(uri_parts) > 1 else "Production"
             )
-            
+
             # Get model version details
             if stage_or_version.isdigit():
                 # Specific version number provided
@@ -118,7 +118,7 @@ class ModelManager:
                         f"No model found in stage: {stage_or_version}"
                     )
                 model_version = model_versions[0]
-            
+
             self._model_metadata = {
                 "name": model_name,
                 "version": model_version.version,
@@ -126,9 +126,9 @@ class ModelManager:
                 "stage": model_version.current_stage,
                 "model_uri": settings.MODEL_URI
             }
-            
+
             logger.info(f"Extracted model metadata: {self._model_metadata}")
-            
+
         except Exception as e:
             logger.warning(f"Failed to extract full model metadata: {e}")
             # Fallback to minimal metadata
@@ -139,7 +139,7 @@ class ModelManager:
                 "stage": "unknown",
                 "model_uri": settings.MODEL_URI
             }
-    
+
     def predict(self, texts: list) -> list:
         """
         Make predictions on a list of texts.
@@ -155,17 +155,17 @@ class ModelManager:
         """
         if self._model is None:
             raise RuntimeError("Model not loaded. Cannot make predictions.")
-        
+
         try:
-            import pandas as pd
-            import numpy as np
-            
+            import pandas as pd  # type: ignore[import-untyped]
+            import numpy as np  # type: ignore[import-untyped]
+
             # Prepare input DataFrame (model expects pandas DataFrame)
             input_df = pd.DataFrame({"text": texts})
-            
+
             # Get predictions
             predictions = self._model.predict(input_df)
-            
+
             # Get prediction probabilities for confidence scores
             # Note: This assumes the model has predict_proba method
             try:
@@ -183,7 +183,7 @@ class ModelManager:
             except Exception as e:
                 logger.warning(f"Could not extract confidence scores: {e}")
                 confidences = [0.5] * len(predictions)
-            
+
             # Format results
             results = []
             for text, sentiment, confidence in zip(
@@ -199,11 +199,11 @@ class ModelManager:
                 })
 
             return results
-            
+
         except Exception as e:
             logger.error(f"Prediction failed: {e}")
             raise RuntimeError(f"Prediction failed: {str(e)}")
-    
+
     def get_model_info(self) -> Dict[str, Any]:
         """
         Get model metadata information.
@@ -215,7 +215,7 @@ class ModelManager:
             **self._model_metadata,
             "loaded_at": self._loaded_at
         }
-    
+
     def is_loaded(self) -> bool:
         """
         Check if model is loaded and ready.
@@ -241,4 +241,3 @@ def get_model_manager() -> ModelManager:
     if model_manager is None:
         model_manager = ModelManager()
     return model_manager
-

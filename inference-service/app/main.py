@@ -23,6 +23,7 @@ from app.schemas import (
     HealthResponse,
 )
 from app.model_loader import get_model_manager, ModelManager
+from typing import Optional
 
 # Configure logging
 logging.basicConfig(
@@ -32,7 +33,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Global model manager instance
-model_manager: ModelManager = None
+model_manager: Optional[ModelManager] = None
 
 
 @asynccontextmanager
@@ -95,7 +96,7 @@ async def global_exception_handler(request, exc: Exception):
     logger.error(f"Unhandled exception: {exc}", exc_info=True)
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        content={"error": "Internal server error", "detail": str(exc)}
+        content={"error": "Internal server error"}
     )
 
 
@@ -112,12 +113,12 @@ async def global_exception_handler(request, exc: Exception):
 async def health_check():
     """
     Health check endpoint for Kubernetes probes.
-    
+
     Returns:
         HealthResponse with service status and model readiness.
     """
     is_healthy = model_manager is not None and model_manager.is_loaded()
-    
+
     return HealthResponse(
         status="healthy" if is_healthy else "unhealthy",
         model_loaded=is_healthy,
@@ -139,10 +140,10 @@ async def health_check():
 async def get_model_info():
     """
     Get information about the currently loaded model.
-    
+
     Returns:
         ModelInfoResponse with model metadata.
-        
+
     Raises:
         HTTPException: If model is not loaded.
     """
@@ -151,7 +152,7 @@ async def get_model_info():
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Model not loaded"
         )
-    
+
     try:
         model_info = model_manager.get_model_info()
         return ModelInfoResponse(**model_info)
@@ -159,7 +160,7 @@ async def get_model_info():
         logger.error(f"Error retrieving model info: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to retrieve model information: {str(e)}"
+            detail="Failed to retrieve model information."
         )
 
 
@@ -174,13 +175,13 @@ async def get_model_info():
 async def predict(request: PredictionRequest):
     """
     Predict sentiment for a single text.
-    
+
     Args:
         request: PredictionRequest containing the text to analyze.
-        
+
     Returns:
         PredictionResponse with sentiment prediction and confidence.
-        
+
     Raises:
         HTTPException: If model is not loaded or prediction fails.
     """
@@ -189,7 +190,7 @@ async def predict(request: PredictionRequest):
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Model not loaded. Service not ready."
         )
-    
+
     try:
         logger.info(
             f"Received prediction request for text: '{request.text[:50]}...'"
@@ -198,19 +199,19 @@ async def predict(request: PredictionRequest):
         # Make prediction (using batch method with single item)
         predictions = model_manager.predict([request.text])
         result = predictions[0]
-        
+
         logger.info(
             f"Prediction completed: sentiment={result['sentiment']}, "
             f"confidence={result['confidence']:.3f}"
         )
-        
+
         return PredictionResponse(**result)
-        
+
     except Exception as e:
         logger.error(f"Prediction failed: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Prediction failed: {str(e)}"
+            detail="Prediction failed."
         )
 
 
@@ -245,7 +246,7 @@ async def predict_batch(request: BatchPredictionRequest):
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Model not loaded. Service not ready."
         )
-    
+
     # Check batch size
     if len(request.texts) > settings.MAX_BATCH_SIZE:
         raise HTTPException(
@@ -255,7 +256,7 @@ async def predict_batch(request: BatchPredictionRequest):
                 f"allowed size of {settings.MAX_BATCH_SIZE}"
             )
         )
-    
+
     try:
         logger.info(
             f"Received batch prediction request for {len(request.texts)} texts"
@@ -263,7 +264,7 @@ async def predict_batch(request: BatchPredictionRequest):
 
         # Make predictions
         predictions = model_manager.predict(request.texts)
-        
+
         # Convert to response models
         prediction_responses = [
             PredictionResponse(**pred) for pred in predictions
@@ -272,14 +273,14 @@ async def predict_batch(request: BatchPredictionRequest):
         logger.info(
             f"Batch prediction completed: {len(predictions)} predictions made"
         )
-        
+
         return BatchPredictionResponse(predictions=prediction_responses)
-        
+
     except Exception as e:
         logger.error(f"Batch prediction failed: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Batch prediction failed: {str(e)}"
+            detail="Batch prediction failed."
         )
 
 
@@ -292,7 +293,7 @@ async def predict_batch(request: BatchPredictionRequest):
 async def root():
     """
     Root endpoint with service information.
-    
+
     Returns:
         Dictionary with service name, version, and documentation link.
     """
@@ -303,4 +304,3 @@ async def root():
         "health": "/health",
         "model_info": "/models/info"
     }
-

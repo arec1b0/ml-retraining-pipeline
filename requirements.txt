@@ -30,7 +30,8 @@ evidently                 # Data drift and model performance monitoring
 # ML & Data Science Stack
 # -----------------------------------------------------------------
 scikit-learn              # Core ML library for modeling and metrics
-pandas                    # Data manipulation and analysis
+polars                    # High-performance DataFrame library with lazy evaluation (primary data processing)
+pandas                    # Data manipulation (used for library compatibility, e.g., Evidently AI)
 numpy                     # Numerical computing
 scipy                     # Scientific computing (often a dependency)
 

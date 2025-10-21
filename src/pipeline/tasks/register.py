@@ -9,7 +9,7 @@ current production model.
 """
 
 import mlflow
-import requests
+import requests  # type: ignore[import-untyped]
 from mlflow.tracking import MlflowClient
 from mlflow.entities import ModelVersion
 from prefect import task, get_run_logger
