@@ -1,0 +1,6 @@
+Method,Name,Error,Occurrences
+POST,predict_batch_small,HTTPError('503 Server Error: Service Unavailable for url: predict_batch_small'),9
+POST,predict_single,HTTPError('503 Server Error: Service Unavailable for url: predict_single'),44
+POST,rapid_batch,HTTPError('503 Server Error: Service Unavailable for url: rapid_batch'),404
+POST,predict_batch_medium,HTTPError('503 Server Error: Service Unavailable for url: predict_batch_medium'),31
+POST,predict_batch_large,HTTPError('503 Server Error: Service Unavailable for url: predict_batch_large'),11

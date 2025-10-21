@@ -6,6 +6,7 @@ from MLflow Model Registry. Designed for Kubernetes deployment with
 health checks, monitoring, and batch prediction support.
 """
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, status
@@ -197,7 +198,9 @@ async def predict(request: PredictionRequest):
         )
 
         # Make prediction (using batch method with single item)
-        predictions = model_manager.predict([request.text])
+        predictions = await asyncio.to_thread(
+            model_manager.predict, [request.text]
+        )
         result = predictions[0]
 
         logger.info(
@@ -263,7 +266,9 @@ async def predict_batch(request: BatchPredictionRequest):
         )
 
         # Make predictions
-        predictions = model_manager.predict(request.texts)
+        predictions = await asyncio.to_thread(
+            model_manager.predict, request.texts
+        )
 
         # Convert to response models
         prediction_responses = [
