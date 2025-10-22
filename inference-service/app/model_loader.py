@@ -48,10 +48,16 @@ class ModelManager:
 
     def load_model(self) -> None:
         """
-        Load model from MLflow Model Registry.
+        Loads the sentiment analysis model from the MLflow Model Registry.
+
+        This method configures the MLflow tracking URI, loads the model specified
+        in the settings, and extracts its metadata. It is called automatically
+        on `ModelManager` initialization.
 
         Raises:
-            Exception: If model loading fails.
+            RuntimeError: If the MLflow tracking URI is not set or if model
+                          loading fails for any reason (e.g., model not found,
+                          network error).
         """
         try:
             logger.info(
@@ -83,10 +89,11 @@ class ModelManager:
 
     def _extract_model_metadata(self) -> None:
         """
-        Extract metadata from the loaded MLflow model.
+        Extracts metadata for the loaded model from the MLflow Model Registry.
 
-        This includes model name, version, run_id, and stage from the
-        Model Registry.
+        Connects to the MLflow server to fetch details like the model's version,
+        the run ID that produced it, and its current deployment stage. This
+        information is stored for logging and monitoring purposes.
         """
         try:
             client = MlflowClient(tracking_uri=settings.MLFLOW_TRACKING_URI)
@@ -142,16 +149,25 @@ class ModelManager:
 
     def predict(self, texts: list) -> list:
         """
-        Make predictions on a list of texts.
+        Generates sentiment predictions for a list of input texts.
+
+        This is the core inference method. It takes a list of strings,
+        formats them into a pandas DataFrame as expected by the MLflow model,
+        and returns a list of structured prediction results. It also attempts
+        to extract prediction probabilities to provide a confidence score.
 
         Args:
-            texts: List of text strings to predict.
+            texts: A list of strings to be analyzed.
 
         Returns:
-            List of prediction dictionaries with sentiment and confidence.
+            A list of dictionaries, where each dictionary contains the original
+            text, the predicted sentiment, a confidence score, and the model
+            version used for the prediction.
 
         Raises:
-            RuntimeError: If model is not loaded or prediction fails.
+            RuntimeError: If the model is not loaded before this method is
+                          called or if an error occurs during the prediction
+                          process.
         """
         if self._model is None:
             raise RuntimeError("Model not loaded. Cannot make predictions.")
@@ -206,10 +222,11 @@ class ModelManager:
 
     def get_model_info(self) -> Dict[str, Any]:
         """
-        Get model metadata information.
+        Retrieves metadata about the currently loaded model.
 
         Returns:
-            Dictionary containing model metadata.
+            A dictionary containing key information such as the model's name,
+            version, run ID, stage, and the timestamp of when it was loaded.
         """
         return {
             **self._model_metadata,
@@ -218,10 +235,13 @@ class ModelManager:
 
     def is_loaded(self) -> bool:
         """
-        Check if model is loaded and ready.
+        Checks if the model has been successfully loaded into memory.
+
+        This method is used by the health check endpoint to determine if the
+        service is ready to accept prediction requests.
 
         Returns:
-            True if model is loaded, False otherwise.
+            True if the model is loaded, False otherwise.
         """
         return self._model is not None
 
@@ -232,10 +252,15 @@ model_manager: Optional[ModelManager] = None
 
 def get_model_manager() -> ModelManager:
     """
-    Get or create the global ModelManager instance.
+    Retrieves the singleton instance of the ModelManager.
+
+    This function acts as a factory and accessor for the `ModelManager`.
+    It ensures that only one instance of the `ModelManager` is created and
+    used throughout the application's lifecycle, preventing multiple models
+    from being loaded into memory.
 
     Returns:
-        The ModelManager singleton instance.
+        The singleton `ModelManager` instance.
     """
     global model_manager
     if model_manager is None:

@@ -32,13 +32,20 @@ def load_raw_data(settings: Settings) -> pl.DataFrame:
     Loads the raw data from the specified file path using Polars.
 
     Uses Polars for efficient data loading with lazy evaluation support,
-    allowing processing of datasets larger than available RAM.
+    allowing processing of datasets larger than available RAM. This task
+    serves as the entry point for the data processing pipeline.
 
     Args:
-        settings: The application settings object.
+        settings: An instance of the `Settings` class containing configuration
+                  parameters, including the path to the raw data file.
 
     Returns:
         A Polars DataFrame containing the raw data.
+
+    Raises:
+        FileNotFoundError: If the file specified in `settings.RAW_DATA_PATH`
+                           does not exist.
+        Exception: For any other errors that occur during file loading.
     """
     logger.info(f"Loading raw data from: {settings.RAW_DATA_PATH}")
     try:
@@ -68,16 +75,25 @@ def validate_data(
 ) -> bool:
     """
     Runs a Great Expectations validation checkpoint against the loaded data.
-    If validation fails, this task will fail, stopping the pipeline.
+
+    This task integrates with Great Expectations to ensure the quality of
+    the raw data. It runs a predefined checkpoint, and if the validation
+    fails, this task will raise an error, effectively stopping the pipeline
+    to prevent bad data from proceeding.
+
     Args:
-        data_path: The path to the data to validate.
-        suite_name: The name of the GE Expectation Suite to use.
-        checkpoint_name: The name of the GE Checkpoint to run.
-        data_asset_name: The name of the GE Data Asset.
+        data_path: The file path to the data that needs to be validated.
+        suite_name: The name of the Great Expectations Expectation Suite to use
+                    for validation.
+        checkpoint_name: The name of the Great Expectations Checkpoint to run.
+        data_asset_name: The name assigned to the data asset within Great
+                         Expectations.
+
     Returns:
-        True if data validation is successful.
+        True if the data validation is successful.
+
     Raises:
-        ValueError: If data validation fails.
+        ValueError: If the data validation fails, to halt the pipeline execution.
     """
     logger.info(
         f"Running data validation suite '{suite_name}' on {data_path}"
@@ -101,15 +117,21 @@ def preprocess_data(
 ) -> pl.DataFrame:
     """
     Performs preprocessing on the raw data using Polars.
-    For this project, preprocessing is minimal:
-    1.  Select relevant columns.
-    2.  Drop rows with missing values in 'text' or 'sentiment'.
-    3.  Save the processed data to the path specified in settings.
+
+    This task handles the initial data cleaning and transformation. For this
+    project, the preprocessing is minimal and includes:
+    1. Selecting the relevant columns (`id`, `text`, `sentiment`).
+    2. Dropping any rows that have missing values in the `text` or `sentiment`
+       columns.
+    3. Saving the cleaned data to the path specified in the settings.
+
     Args:
-        df: The raw Polars DataFrame.
-        settings: The application settings object.
+        df: The raw Polars DataFrame to be preprocessed.
+        settings: The application settings object, used to determine the output
+                  path for the processed data.
+
     Returns:
-        A preprocessed Polars DataFrame.
+        A preprocessed Polars DataFrame ready for further steps.
     """
     logger.info("Starting data preprocessing...")
     # Select columns (in case raw data has extra columns)
@@ -146,13 +168,22 @@ def split_data(
 ) -> Tuple[pd.Series, pd.Series, pd.Series, pd.Series]:
     """
     Splits the preprocessed data into training and testing sets.
-    Converts Polars DataFrame to pandas Series for sklearn compatibility,
-    as sklearn's train_test_split works with pandas/numpy data structures.
+
+    This task prepares the data for model training by dividing it into
+    separate sets for training and evaluation. It converts the required
+    Polars DataFrame columns into pandas Series to ensure compatibility
+    with scikit-learn's `train_test_split` function. The split is
+    stratified to maintain the same proportion of sentiment labels in both
+    the training and testing sets.
+
     Args:
         df: The preprocessed Polars DataFrame.
-        settings: The application settings object.
+        settings: The application settings object, which provides the test split
+                  size and the random state for reproducibility.
+
     Returns:
-        A tuple containing (X_train, X_test, y_train, y_test) as pandas Series.
+        A tuple containing four pandas Series:
+        (X_train, X_test, y_train, y_test).
     """
     logger.info("Splitting data into training and testing sets...")
     # Extract columns as pandas Series for sklearn compatibility
@@ -179,12 +210,20 @@ def split_data(
 def load_reference_data(path: str) -> pl.DataFrame:
     """
     Loads the reference dataset for drift comparison using Polars.
+
+    The reference dataset serves as a stable, "golden" baseline against which
+    new production data is compared to detect data drift or model performance
+    degradation.
+
     Args:
-        path: Path to the reference data file.
+        path: The file path to the reference data.
+
     Returns:
         A Polars DataFrame containing the reference data.
+
     Raises:
-        FileNotFoundError: If reference data file is not found.
+        FileNotFoundError: If the reference data file is not found at the
+                           specified path.
     """
     logger.info(f"Loading reference data from: {path}")
     try:
@@ -208,23 +247,30 @@ def simulate_current_data(
     reference_df: pl.DataFrame, new_raw_df: pl.DataFrame, settings: Settings
 ) -> pl.DataFrame:
     """
-    Simulates a "current" dataset for drift analysis by running the production
-    model on new raw data.
-    In a real system, this task would:
-    1. Fetch recent prediction logs from a production database.
-    2. Join them with ground truth labels (if available).
-    Here, we simulate it by:
-    1. Loading the *latest* production model from MLflow.
-    2. Running predictions on the *new raw data*.
-    3. Returning a DataFrame in the same format as the reference data.
+    Simulates a "current" dataset for the purpose of drift analysis.
+
+    In a real-world production environment, this task would typically fetch
+    recent prediction logs from a database. To simulate this, it performs
+    the following steps:
+    1. Loads the latest model version from the "Production" stage in the
+       MLflow Model Registry.
+    2. Runs predictions with this model on the new, unprocessed raw data.
+    3. Assembles a new DataFrame that mirrors the structure of the reference
+       dataset, including features, ground truth, and the model's predictions.
+
+    If no "Production" model is found (e.g., on the very first run of the
+    pipeline), it returns the reference data to allow the pipeline to proceed
+    without failing.
+
     Args:
-        reference_df: The reference (golden) dataset as Polars DataFrame.
-        new_raw_df: The new raw data to generate predictions for
-                    as Polars DataFrame.
-        settings: The application settings object.
+        reference_df: The reference (golden) dataset, used as a fallback.
+        new_raw_df: The new raw data on which to generate predictions.
+        settings: The application settings object, used to locate the
+                  production model in the registry.
+
     Returns:
-        A Polars DataFrame containing the simulated current data
-        with predictions.
+        A Polars DataFrame simulating the current production data, including
+        predictions.
     """
     logger.info("Simulating current data with predictions...")
     try:

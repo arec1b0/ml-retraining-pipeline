@@ -1,6 +1,7 @@
 # Automated Model Retraining Pipeline 🔄📊
 
-This project implements a complete, end-to-end MLOps pipeline for a sentiment analysis model. It is designed to complement the `KubeSentiment` project by focusing on the full MLOps feedback loop: data validation, model monitoring (drift detection), automated retraining, and model registration.
+## Purpose
+This project implements a complete, end-to-end MLOps pipeline for a sentiment analysis model. It is designed to complement the KubeSentiment project by focusing on the full MLOps feedback loop: data validation, model monitoring (drift detection), automated retraining, and model registration.
 
 The core of this system is a **Prefect** workflow that is triggered when model performance or data quality degrades, ensuring the production model remains accurate and robust over time.
 
@@ -26,33 +27,9 @@ This system is built using a modern, Python-native MLOps stack:
 
 ---
 
-## 🔗 CT-CD Integration (Continuous Training → Continuous Deployment)
+## 🚀 Getting Started and Usage Guide
 
-This pipeline features **automated CT-CD linkage** that closes the loop between model training and deployment:
-
-**What it does:**
-- 🤖 When a new model is promoted to Production in MLflow, it automatically triggers the CD pipeline
-- 🚀 The CD pipeline builds and pushes a new Docker image for the inference service
-- 📊 Full traceability: Model version and accuracy metadata are passed to the deployment
-
-**Quick Setup:**
-```bash
-# 1. Set environment variables in .env
-ENABLE_CD_TRIGGER=true
-GITHUB_TOKEN=your_github_token
-GITHUB_REPO_OWNER=your-username
-GITHUB_REPO_NAME=ml-retraining-pipeline
-
-# 2. That's it! The next time a model is promoted, CD will trigger automatically
-```
-
-**Documentation:**
-- 📖 [Quick Start Guide](docs/QUICK_START_CT_CD.md) - 5-minute setup
-- 📖 [Full CT-CD Documentation](docs/CT_CD_INTEGRATION.md) - Architecture & best practices
-
----
-
-## 🚀 Getting Started (Windows 11)
+This guide provides a comprehensive overview of how to set up, run, and interpret the results of the automated retraining pipeline.
 
 ### Prerequisites
 
@@ -79,9 +56,9 @@ pip install -r requirements.txt
 # Create your local environment file
 # (Copy .env.example and leave default values for local setup)
 copy .env.example .env
-````
+```
 
-### 2\. Initialize MLOps Tooling
+### 2. Initialize MLOps Tooling
 
 These commands only need to be run once to set up the project.
 
@@ -91,7 +68,7 @@ These commands only need to be run once to set up the project.
 great_expectations init
 ```
 
-### 3\. Initialize DVC (Simulated)
+### 3. Initialize DVC (Simulated)
 
 This project is configured to use DVC with an S3-compatible backend. For local development, you would typically use a local remote or a Docker-based MinIO server.
 
@@ -106,9 +83,9 @@ This project is configured to use DVC with an S3-compatible backend. For local d
 dvc pull
 ```
 
-### 4\. Run the Retraining Pipeline
+### 4. Running the Retraining Pipeline
 
-The pipeline is defined and managed by Prefect.
+The pipeline is defined and managed by Prefect. The main entrypoint is `src/pipeline/flows.py`, which orchestrates all the steps.
 
 ```bash
 # 1. Start the Prefect server (in a separate terminal)
@@ -118,28 +95,64 @@ prefect server start
 # 2. Run the main retraining flow
 # This will execute the entire pipeline: validation, training, evaluation,
 # drift detection, and registration.
+# The `force_retrain=True` flag is necessary for the first run to ensure
+# a baseline model is trained and registered.
 python src/pipeline/flows.py
 
 # 3. Open the Prefect UI in your browser to see the run:
 # [http://127.0.0.1:4200](http://127.0.0.1:4200)
 ```
 
-### 5\. View Results
+### 5. Interpreting the Outputs and Viewing Results
 
-  * **Prefect UI:** [http://127.0.0.1:4200](https://www.google.com/url?sa=E&source=gmail&q=http://127.0.0.1:4200)
-      * Observe the flow run graph and task logs.
-  * **MLflow UI:** (In a new terminal)
-    ```bash
-    mlflow ui
-    ```
-      * Open [http://127.0.0.1:5000](https://www.google.com/search?q=http://127.0.0.1:5000) to view experiments, compare runs, and see registered models.
-  * **Great Expectations Data Docs:**
-      * Open `great_expectations/uncommitted/data_docs/local_site/index.html` to see data validation results.
-  * **Evidently AI Reports:**
-      * Open the HTML files generated in `reports/evidently/` to see drift analysis.
+After a successful run, you can inspect the outputs from the various MLOps tools:
 
------
+*   **Prefect UI:** [http://127.0.0.1:4200](http://127.0.0.1:4200)
+    *   Observe the flow run graph, view detailed logs for each task, and see the final status of the pipeline.
 
+*   **MLflow UI:**
+    *   Launch the MLflow UI from your terminal:
+        ```bash
+        mlflow ui
+        ```
+    *   Open [http://127.0.0.1:5000](http://127.0.0.1:5000) to:
+        *   **Compare Runs:** Analyze the parameters and metrics from different training runs.
+        *   **View Artifacts:** Inspect the model files and other artifacts logged during training.
+        *   **Manage Models:** Check the Model Registry to see which models are in "Staging" or "Production".
+
+*   **Great Expectations Data Docs:**
+    *   Open `great_expectations/uncommitted/data_docs/local_site/index.html` in your browser.
+    *   Review the data validation results to see if the raw data met the quality expectations defined in the suite.
+
+*   **Evidently AI Reports:**
+    *   Navigate to the `reports/evidently/` directory.
+    *   Open the most recent HTML report to visualize data drift and model performance degradation metrics. This report is critical for understanding *why* a model retraining was triggered.
+
+---
+## 🔗 CT-CD Integration (Continuous Training → Continuous Deployment)
+
+This pipeline features **automated CT-CD linkage** that closes the loop between model training and deployment:
+
+**What it does:**
+- 🤖 When a new model is promoted to Production in MLflow, it automatically triggers the CD pipeline
+- 🚀 The CD pipeline builds and pushes a new Docker image for the inference service
+- 📊 Full traceability: Model version and accuracy metadata are passed to the deployment
+
+**Quick Setup:**
+```bash
+# 1. Set environment variables in .env
+ENABLE_CD_TRIGGER=true
+GITHUB_TOKEN=your_github_token
+GITHUB_REPO_OWNER=your-username
+GITHUB_REPO_NAME=ml-retraining-pipeline
+
+# 2. That's it! The next time a model is promoted, CD will trigger automatically
+```
+
+**Documentation:**
+- 📖 [Quick Start Guide](docs/QUICK_START_CT_CD.md) - 5-minute setup
+- 📖 [Full CT-CD Documentation](docs/CT_CD_INTEGRATION.md) - Architecture & best practices
+---
 ## 📂 Project Structure
 
 ```

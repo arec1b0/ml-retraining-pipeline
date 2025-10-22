@@ -28,19 +28,24 @@ def trigger_cd_pipeline(
     settings: Settings,
 ) -> bool:
     """
-    Triggers the CD pipeline via GitHub Actions workflow_dispatch API.
+    Triggers a remote CI/CD pipeline using the GitHub Actions API.
 
-    This function implements the CT -> CD linkage by automatically
-    triggering the deployment pipeline when a new model is promoted
-    to Production.
+    This function forms the critical link between the Continuous Training (CT)
+    and Continuous Deployment (CD) processes. When a new model is promoted to
+    the "Production" stage, this function is called to send a `workflow_dispatch`
+    event to a specified GitHub repository and workflow file. This action
+    initiates the deployment process automatically.
 
     Args:
-        model_version: The version number of the promoted model.
-        model_accuracy: The accuracy of the promoted model.
-        settings: The application settings object.
+        model_version: The version of the newly promoted model. This is passed
+                       as an input to the CD workflow.
+        model_accuracy: The accuracy of the new model, also passed as an input.
+        settings: The application settings object, which contains the necessary
+                  GitHub repository details and authentication token.
 
     Returns:
-        True if the CD pipeline was successfully triggered, else False.
+        `True` if the API call to trigger the workflow was successful (returned
+        a 204 status code), `False` otherwise.
     """
     prefect_logger = get_run_logger()
 
@@ -140,23 +145,31 @@ def register_model(
     promote_to_production: bool = False,
 ) -> Optional[ModelVersion]:
     """
-    Registers a model from an MLflow run into the Model Registry.
+    Registers a model in the MLflow Model Registry and handles promotion.
 
-    If `evaluation_results["is_eligible"]` is False, this task skips
-    registration.
-
-    If `promote_to_production` is True, it attempts to load the
-    current production model, compares performance, and only promotes
-    the new model if it is better.
+    This task takes a trained and evaluated model from an MLflow run and
+    formally registers it in the Model Registry. It performs the following steps:
+    1.  Checks if the model is eligible for registration based on evaluation results.
+    2.  Registers the model artifact from the specified `run_id`.
+    3.  If `promote_to_production` is `True`, it proceeds to the promotion logic.
+        - It compares the new model's accuracy against the current production
+          model.
+        - If the new model is better, it is promoted to the "Production" stage,
+          and the old production model is archived.
+        - If not better, or if promotion is disabled, it is moved to "Staging".
+    4.  Triggers the CD pipeline if a model is successfully promoted to "Production".
 
     Args:
-        run_id: The MLflow run ID of the trained model.
-        evaluation_results: The dictionary from the `evaluate_model` task.
+        run_id: The ID of the MLflow run containing the trained model.
+        evaluation_results: A dictionary from the `evaluate_model` task, which
+                            includes metrics and an eligibility flag.
         settings: The application settings object.
-        promote_to_production: Flag to control direct promotion.
+        promote_to_production: A boolean flag that determines whether to attempt
+                               promotion to the "Production" stage.
 
     Returns:
-        The MLflow ModelVersion object if registered, else None.
+        An `mlflow.entities.ModelVersion` object for the newly registered
+        model if successful, otherwise `None`.
     """
     prefect_logger = get_run_logger()
 
@@ -233,10 +246,19 @@ def promote_model(
     settings: Settings,
 ):
     """
-    Handles the logic for promoting a new model to "Production".
+    Manages the promotion of a new model version to the "Production" stage.
 
-    Compares the new model's performance against the current "Production"
-    model. If it's better, it promotes the new one and archives the old one.
+    This function encapsulates the core logic for comparing a new model
+    candidate against the incumbent production model. If the new model shows
+    superior performance (higher accuracy), it is transitioned to the
+    "Production" stage. If there is no existing production model, the new
+    model is promoted by default.
+
+    Args:
+        client: An `MlflowClient` instance for interacting with the MLflow server.
+        new_model_version: The `ModelVersion` object of the new model candidate.
+        new_accuracy: The accuracy metric of the new model.
+        settings: The application settings object.
     """
     prefect_logger = get_run_logger()
     model_name = new_model_version.name

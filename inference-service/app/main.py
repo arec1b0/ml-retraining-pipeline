@@ -93,7 +93,21 @@ app.add_middleware(
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request, exc: Exception):
-    """Global exception handler for uncaught errors."""
+    """
+    Handles any uncaught exceptions that occur within the application.
+
+    This middleware catches any exception that is not otherwise handled
+    by a more specific exception handler. It logs the error and returns a
+    standardized JSON response with a 500 Internal Server Error status code,
+    preventing the exposure of sensitive stack trace information to the client.
+
+    Args:
+        request: The incoming request object (provided by FastAPI).
+        exc: The exception that was raised.
+
+    Returns:
+        A `JSONResponse` with a 500 status code and a generic error message.
+    """
     logger.error(f"Unhandled exception: {exc}", exc_info=True)
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -113,10 +127,16 @@ async def global_exception_handler(request, exc: Exception):
 )
 async def health_check():
     """
-    Health check endpoint for Kubernetes probes.
+    Performs a health check of the service.
+
+    This endpoint is designed to be used by orchestration systems like
+    Kubernetes for liveness and readiness probes. It checks the overall
+    service status and, most importantly, whether the machine learning
+    model has been successfully loaded into memory.
 
     Returns:
-        HealthResponse with service status and model readiness.
+        A `HealthResponse` object indicating the service's health status,
+        model readiness, service name, and version.
     """
     is_healthy = model_manager is not None and model_manager.is_loaded()
 
@@ -140,13 +160,19 @@ async def health_check():
 )
 async def get_model_info():
     """
-    Get information about the currently loaded model.
+    Retrieves metadata about the currently loaded machine learning model.
+
+    This endpoint provides clients with detailed information about the active
+    model, including its name from the MLflow Registry, its version, the
+    specific run ID that produced it, and its current deployment stage.
 
     Returns:
-        ModelInfoResponse with model metadata.
+        A `ModelInfoResponse` object containing the model's metadata.
 
     Raises:
-        HTTPException: If model is not loaded.
+        HTTPException: Returns a 503 Service Unavailable error if the model
+                       has not been loaded yet, or a 500 Internal Server Error
+                       if the metadata cannot be retrieved.
     """
     if model_manager is None or not model_manager.is_loaded():
         raise HTTPException(
@@ -175,16 +201,22 @@ async def get_model_info():
 )
 async def predict(request: PredictionRequest):
     """
-    Predict sentiment for a single text.
+    Provides a sentiment prediction for a single input text.
+
+    This endpoint takes a single text string, processes it through the loaded
+    sentiment analysis model, and returns the predicted sentiment along with
+a   confidence score and the model version used.
 
     Args:
-        request: PredictionRequest containing the text to analyze.
+        request: A `PredictionRequest` object containing the text to analyze.
 
     Returns:
-        PredictionResponse with sentiment prediction and confidence.
+        A `PredictionResponse` object with the sentiment prediction details.
 
     Raises:
-        HTTPException: If model is not loaded or prediction fails.
+        HTTPException: Returns a 503 Service Unavailable error if the model
+                       is not loaded, or a 500 Internal Server Error if the
+                       prediction process fails.
     """
     if model_manager is None or not model_manager.is_loaded():
         raise HTTPException(
@@ -231,18 +263,25 @@ async def predict(request: PredictionRequest):
 )
 async def predict_batch(request: BatchPredictionRequest):
     """
-    Predict sentiment for a batch of texts.
+    Provides sentiment predictions for a batch of input texts.
+
+    This endpoint is optimized for higher throughput by allowing multiple text
+    strings to be processed in a single request. It imposes a configurable
+    limit on the batch size to prevent server overload.
 
     Args:
-        request:
-            BatchPredictionRequest containing list of texts to analyze.
+        request: A `BatchPredictionRequest` object containing a list of texts.
 
     Returns:
-        BatchPredictionResponse with predictions for each text.
+        A `BatchPredictionResponse` object containing a list of prediction
+        results for each corresponding input text.
 
     Raises:
-        HTTPException: If model is not loaded, batch size exceeds
-            limit, or prediction fails.
+        HTTPException:
+            - 503 Service Unavailable: If the model is not loaded.
+            - 400 Bad Request: If the number of texts in the request exceeds
+              the `MAX_BATCH_SIZE` setting.
+            - 500 Internal Server Error: If the prediction process fails.
     """
     if model_manager is None or not model_manager.is_loaded():
         raise HTTPException(
@@ -297,10 +336,13 @@ async def predict_batch(request: BatchPredictionRequest):
 )
 async def root():
     """
-    Root endpoint with service information.
+    Serves as the root endpoint for the service.
+
+    Provides basic information about the service, including its name, version,
+    and links to key operational endpoints like documentation and health checks.
 
     Returns:
-        Dictionary with service name, version, and documentation link.
+        A dictionary containing essential service information.
     """
     return {
         "service": settings.SERVICE_NAME,

@@ -10,7 +10,14 @@ from typing import List, Optional
 
 
 class PredictionRequest(BaseModel):
-    """Request schema for single text prediction."""
+    """
+    Represents a request for a single text prediction.
+
+    Attributes:
+        text: The input string to be analyzed for sentiment.
+              It must be between 1 and 5000 characters and not
+              consist solely of whitespace.
+    """
     
     text: str = Field(
         ...,
@@ -23,14 +30,32 @@ class PredictionRequest(BaseModel):
     @field_validator('text')
     @classmethod
     def validate_text_not_empty(cls, v: str) -> str:
-        """Ensure text is not just whitespace."""
+        """
+        Validates that the input text is not empty or just whitespace.
+
+        Args:
+            v: The input text string.
+
+        Returns:
+            The validated text string.
+
+        Raises:
+            ValueError: If the text is empty or contains only whitespace.
+        """
         if not v.strip():
             raise ValueError("Text cannot be empty or only whitespace")
         return v
 
 
 class BatchPredictionRequest(BaseModel):
-    """Request schema for batch prediction."""
+    """
+    Represents a request for batch predictions on a list of texts.
+
+    Attributes:
+        texts: A list of strings to be analyzed. The list must contain
+               at least one string, and each string must adhere to the
+               validation rules defined in `PredictionRequest`.
+    """
     
     texts: List[str] = Field(
         ...,
@@ -42,7 +67,19 @@ class BatchPredictionRequest(BaseModel):
     @field_validator('texts')
     @classmethod
     def validate_texts(cls, v: List[str]) -> List[str]:
-        """Validate each text in the batch."""
+        """
+        Validates each text in the batch to ensure it meets requirements.
+
+        Args:
+            v: The list of text strings.
+
+        Returns:
+            The validated list of text strings.
+
+        Raises:
+            ValueError: If the list is empty, a text is empty/whitespace,
+                        or a text exceeds the maximum length.
+        """
         if not v:
             raise ValueError("Texts list cannot be empty")
 
@@ -61,7 +98,15 @@ class BatchPredictionRequest(BaseModel):
 
 
 class PredictionResponse(BaseModel):
-    """Response schema for single prediction."""
+    """
+    Represents the prediction result for a single text.
+
+    Attributes:
+        text: The original input text.
+        sentiment: The predicted sentiment label (e.g., "positive").
+        confidence: The confidence score of the prediction, between 0.0 and 1.0.
+        model_version: The version of the model that made the prediction.
+    """
     
     text: str = Field(..., description="Original input text")
     sentiment: str = Field(..., description="Predicted sentiment label")
@@ -78,7 +123,13 @@ class PredictionResponse(BaseModel):
 
 
 class BatchPredictionResponse(BaseModel):
-    """Response schema for batch predictions."""
+    """
+    Represents the response for a batch prediction request.
+
+    Attributes:
+        predictions: A list of `PredictionResponse` objects, one for each
+                     input text in the batch request.
+    """
     
     predictions: List[PredictionResponse] = Field(
         ...,
@@ -87,7 +138,20 @@ class BatchPredictionResponse(BaseModel):
 
 
 class ModelInfoResponse(BaseModel):
-    """Response schema for model information."""
+    """
+    Represents metadata about the currently loaded model.
+
+    Provides key information about the model being served, such as its
+    name in the registry, version, and the MLflow run that produced it.
+
+    Attributes:
+        model_name: The name of the model as registered in MLflow.
+        version: The specific version number of the model.
+        run_id: The ID of the MLflow run that generated the model.
+        model_uri: The MLflow URI used to load the model.
+        stage: The deployment stage of the model (e.g., "Production").
+        loaded_at: The UTC timestamp (ISO format) when the model was loaded.
+    """
 
     model_name: str = Field(
         ...,
@@ -110,7 +174,18 @@ class ModelInfoResponse(BaseModel):
 
 
 class HealthResponse(BaseModel):
-    """Response schema for health check."""
+    """
+    Represents the health status of the inference service.
+
+    This schema is used by the `/health` endpoint to provide a status
+    that can be consumed by orchestration platforms like Kubernetes.
+
+    Attributes:
+        status: The overall health status ("healthy" or "unhealthy").
+        model_loaded: A boolean indicating if the ML model is successfully loaded.
+        service_name: The name of the service.
+        version: The current version of the service.
+    """
     
     status: str = Field(..., description="Service health status")
     model_loaded: bool = Field(
@@ -122,7 +197,15 @@ class HealthResponse(BaseModel):
 
 
 class ErrorResponse(BaseModel):
-    """Response schema for error messages."""
+    """
+    Represents a standardized error response.
+
+    Used for returning consistent error messages from the API.
+
+    Attributes:
+        error: A high-level error message.
+        detail: An optional field for more detailed error information.
+    """
     
     error: str = Field(..., description="Error message")
     detail: Optional[str] = Field(

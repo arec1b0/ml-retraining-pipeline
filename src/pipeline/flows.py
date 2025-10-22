@@ -48,15 +48,26 @@ def check_drift_and_performance(
     """
     Runs Evidently AI analysis and determines if retraining is needed.
 
-    Converts Polars DataFrames to pandas for Evidently AI compatibility.
+    This task serves as the decision point in the MLOps pipeline. It takes
+    the reference (baseline) data and the current (production) data, then
+    uses the `run_drift_analysis` utility to generate a comprehensive report
+    on data drift and model performance. Based on the results, it decides
+    whether a full model retraining is warranted.
+
+    Note:
+        This function acts as a bridge between the Polars-based data
+        processing pipeline and the pandas-based Evidently AI library. It
+        handles the conversion between DataFrame types.
 
     Args:
-        reference_df: The reference (golden) dataset as Polars DataFrame.
-        current_df: The current (production simulation) dataset as
-                   Polars DataFrame.
+        reference_df: A Polars DataFrame representing the stable, reference
+                      dataset.
+        current_df: A Polars DataFrame representing the new, current data,
+                    including predictions from the production model.
 
     Returns:
-        True if retraining is triggered, False otherwise.
+        A boolean value: `True` if data drift or performance degradation
+        is detected (triggering retraining), `False` otherwise.
     """
     logger = get_run_logger()
     logger.info("Checking for data drift and model performance degradation...")
@@ -94,23 +105,27 @@ def check_drift_and_performance(
 @flow(name="Automated Retraining Flow", log_prints=True)
 def retraining_flow(force_retrain: bool = False):
     """
-    The main MLOps flow for automated model retraining.
+    Orchestrates the end-to-end automated model retraining pipeline.
 
-    This flow performs the following steps:
-    1.  Loads new raw data (e.g., from `data/raw/feedback.csv`).
-    2.  Validates the quality of the new data using Great Expectations.
-    3.  Loads the reference (golden) dataset.
-    4.  Simulates a "current" production dataset by running the
-        production model on the new raw data.
-    5.  Analyzes for data drift or model degradation using Evidently AI.
-    6.  If drift/degradation is detected (or `force_retrain` is True),
-        it triggers a full retraining pipeline:
-        a. Preprocesses the new raw data.
-        b. Splits the data into train/test sets.
-        c. Trains a new model, logging to MLflow.
-        d. Evaluates the new model.
-        e. Registers the new model in the MLflow Registry and
-           promotes it to "Production" if it's better than the old one.
+    This Prefect flow integrates all the components of the MLOps lifecycle,
+    from data validation and drift detection to model training, evaluation,
+    and registration. It is designed to run on a schedule to continuously
+    monitor and maintain the health of the production model.
+
+    The flow follows a conditional logic:
+    1.  It first loads and validates new raw data.
+    2.  It then compares this new data against a stable reference dataset to
+        detect any significant data drift or model performance degradation.
+    3.  If drift is detected, or if the `force_retrain` flag is set to `True`,
+        it proceeds with the full retraining pipeline.
+    4.  If no drift is detected, the flow concludes without retraining, saving
+        computational resources.
+
+    Args:
+        force_retrain: A boolean flag that, when set to `True`, bypasses the
+                       drift detection check and forces the model to retrain.
+                       This is useful for scheduled mandatory retraining or
+                       manual trigger events.
     """
     logger = get_run_logger()
     ctx = get_run_context()  # type: ignore
